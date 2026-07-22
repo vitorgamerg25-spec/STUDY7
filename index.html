@@ -308,18 +308,64 @@
   for (let z = -100; z <= 100; z += 8) faixa(0, z, false);
   for (let x = -100; x <= 100; x += 8) faixa(x, 0, true);
 
-  function cerca(cx, cz, raio) {
-    const postes = 14;
-    const matPoste = new THREE.MeshStandardMaterial({ color: 0xd7ccc8 });
-    for (let i = 0; i < postes; i++) {
-      const ang = (i / postes) * Math.PI * 2;
-      if (Math.abs(ang - Math.PI/2) < 0.35 || Math.abs(ang - (Math.PI*1.5)) < 0.35) continue;
-      const px = cx + Math.cos(ang) * raio;
-      const pz = cz + Math.sin(ang) * raio;
-      const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 6), matPoste);
-      poste.position.set(px, 0.55, pz);
-      poste.castShadow = true;
-      scene.add(poste);
+  function cerca(cx, cz, meioLado) {
+    const alturaPiquete = 1.3;
+    const matPiquete = new THREE.MeshStandardMaterial({ color: 0xf7f7f2 });
+    const matTravessa = new THREE.MeshStandardMaterial({ color: 0xf0f0e8 });
+    const passoAlvo = 0.72;
+    const gateMeia = 1.7; // metade da largura do portão (lado da frente, +z, onde fica a porta)
+
+    function piquete(x, z) {
+      const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.13, alturaPiquete, 0.13), matPiquete);
+      corpo.position.set(x, alturaPiquete/2, z);
+      corpo.castShadow = true;
+      scene.add(corpo);
+      const ponta = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.28, 4), matPiquete);
+      ponta.position.set(x, alturaPiquete + 0.14, z);
+      ponta.rotation.y = Math.PI / 4;
+      ponta.castShadow = true;
+      scene.add(ponta);
+    }
+
+    function travessa(x1, z1, x2, z2, altura) {
+      const dx = x2 - x1, dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.05) return;
+      const trav = new THREE.Mesh(new THREE.BoxGeometry(len, 0.1, 0.08), matTravessa);
+      trav.position.set((x1+x2)/2, altura, (z1+z2)/2);
+      trav.rotation.y = Math.atan2(-dz, dx);
+      trav.castShadow = true;
+      scene.add(trav);
+    }
+
+    function piquetesAoLongo(xa, za, xb, zb, temGate) {
+      const dx = xb - xa, dz = zb - za;
+      const len = Math.hypot(dx, dz);
+      const n = Math.max(2, Math.round(len / passoAlvo));
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const x = xa + dx * t, z = za + dz * t;
+        if (temGate && Math.abs(x - cx) < gateMeia) continue;
+        piquete(x, z);
+      }
+    }
+
+    const bl = [cx - meioLado, cz - meioLado]; // trás-esquerda
+    const br = [cx + meioLado, cz - meioLado]; // trás-direita
+    const fr = [cx + meioLado, cz + meioLado]; // frente-direita
+    const fl = [cx - meioLado, cz + meioLado]; // frente-esquerda
+
+    piquetesAoLongo(bl[0], bl[1], br[0], br[1], false); // trás
+    piquetesAoLongo(br[0], br[1], fr[0], fr[1], false); // direita
+    piquetesAoLongo(fr[0], fr[1], fl[0], fl[1], true);  // frente (com portão)
+    piquetesAoLongo(fl[0], fl[1], bl[0], bl[1], false); // esquerda
+
+    for (const altura of [0.95, 0.42]) {
+      travessa(bl[0], bl[1], br[0], br[1], altura);
+      travessa(br[0], br[1], fr[0], fr[1], altura);
+      travessa(fr[0], fr[1], cx + gateMeia, cz + meioLado, altura);
+      travessa(cx - gateMeia, cz + meioLado, fl[0], fl[1], altura);
+      travessa(fl[0], fl[1], bl[0], bl[1], altura);
     }
   }
 
@@ -404,6 +450,42 @@
     const j2 = new THREE.Mesh(janelaGeo, janelaMat); j2.position.set(2.4*s, 3.5*s, 4.05*s);
     g.add(j1); g.add(j2);
 
+    // venezianas (shutters) nas janelas — clássico visual de casa americana
+    const matVeneziana = new THREE.MeshStandardMaterial({ color: 0x1f4d2e });
+    for (const jx of [-2.4*s, 2.4*s]) {
+      for (const lado of [-1, 1]) {
+        const v = new THREE.Mesh(new THREE.BoxGeometry(0.28*s, 1.3*s, 0.08), matVeneziana);
+        v.position.set(jx + lado * 0.85*s, 3.5*s, 4.05*s);
+        g.add(v);
+      }
+    }
+
+    // varanda coberta na frente (porch americano), com colunas brancas e telhadinho
+    const matBranco = new THREE.MeshStandardMaterial({ color: 0xf7f7f2 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(5.2*s, 0.3*s, 2.4*s), matBranco);
+    deck.position.set(0, 0.15*s, 5.1*s);
+    deck.castShadow = true; deck.receiveShadow = true;
+    g.add(deck);
+
+    const tetoVaranda = new THREE.Mesh(new THREE.BoxGeometry(5.6*s, 0.22*s, 2.6*s), new THREE.MeshStandardMaterial({ color: corTelhado }));
+    tetoVaranda.position.set(0, 3.3*s, 5.1*s);
+    tetoVaranda.castShadow = true;
+    g.add(tetoVaranda);
+
+    for (const cx of [-2.2*s, 2.2*s]) {
+      const coluna = new THREE.Mesh(new THREE.CylinderGeometry(0.14*s, 0.14*s, 3.1*s, 8), matBranco);
+      coluna.position.set(cx, 1.7*s, 6.1*s);
+      coluna.castShadow = true;
+      g.add(coluna);
+    }
+
+    // degraus de entrada
+    for (let i = 0; i < 2; i++) {
+      const degrau = new THREE.Mesh(new THREE.BoxGeometry(2.4*s - i*0.5*s, 0.16*s, 0.5*s), matBranco);
+      degrau.position.set(0, (0.08 + i*0.16)*s, (6.6 - i*0.5)*s);
+      g.add(degrau);
+    }
+
     criarChamineComFumaca(g, s);
 
     g.position.set(x, 0, z);
@@ -415,15 +497,36 @@
       conteudo: conteudo
     };
     scene.add(g);
-    cerca(x, z, 6.4*s);
+    cerca(x, z, 7.3*s);
+    caixaDeCorreio(x, z, 7.3*s);
     return g;
   }
 
+  // caixa de correio americana, no poste ao lado do portão da cerca
+  function caixaDeCorreio(cx, cz, meioLado) {
+    const g = new THREE.Group();
+    const matPoste = new THREE.MeshStandardMaterial({ color: 0x6d4c41 });
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 6), matPoste);
+    poste.position.y = 0.55;
+    poste.castShadow = true;
+    g.add(poste);
+    const matCaixa = new THREE.MeshStandardMaterial({ color: 0xd7d7d7 });
+    const caixa = criarCapsula(0.22, 0.5, matCaixa);
+    caixa.rotation.z = Math.PI / 2;
+    caixa.position.set(0, 1.15, 0.05);
+    g.add(caixa);
+    const bandeira = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.02), new THREE.MeshStandardMaterial({ color: 0xd32f2f }));
+    bandeira.position.set(0.25, 1.2, 0.32);
+    g.add(bandeira);
+    g.position.set(cx + meioLado * 0.33, 0, cz + meioLado + 0.5);
+    scene.add(g);
+  }
+
   const casas = [
-    casa(-32, -32, 0xff1a1a, 0xd50000, "Casa 1", "Dona Rosa agradece a visita e comenta que o jardim está mais bonito depois que você cortou a grama.", 1.0, Math.PI/4),
-    casa(32, -32, 0x0080ff, 0x0d47a1, "Casa 2", "Seu Antônio conta uma história antiga do bairro enquanto toma um cafezinho na varanda.", 1.08, Math.PI/6),
-    casa(-32, 32, 0xffdd00, 0xff9800, "Casa 3", "As crianças da casa mostram o cachorro novo e pedem para você achar a bolinha perdida.", 0.95, Math.PI/3),
-    casa(32, 32, 0x14e64a, 0x1b8a2f, "Casa 4", "O vizinho comenta que perdeu uma chave e agradece se você encontrar por aí.", 1.0, -Math.PI/5),
+    casa(-40, -40, 0xff1a1a, 0xd50000, "Casa 1", "Dona Rosa agradece a visita e comenta que o jardim está mais bonito depois que você cortou a grama.", 1.9, Math.PI/4),
+    casa(40, -40, 0x0080ff, 0x0d47a1, "Casa 2", "Seu Antônio conta uma história antiga do bairro enquanto toma um cafezinho na varanda.", 2.0, Math.PI/6),
+    casa(-40, 40, 0xffdd00, 0xff9800, "Casa 3", "As crianças da casa mostram o cachorro novo e pedem para você achar a bolinha perdida.", 1.75, Math.PI/3),
+    casa(40, 40, 0x14e64a, 0x1b8a2f, "Casa 4", "O vizinho comenta que perdeu uma chave e agradece se você encontrar por aí.", 1.9, -Math.PI/5),
   ];
   let visitadas = 0;
 
@@ -472,7 +575,7 @@
     if (Math.abs(x) < 12 || Math.abs(z) < 12) continue;
     let perto = false;
     for (const c of casas) {
-      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 12) { perto = true; break; }
+      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 19) { perto = true; break; }
     }
     if (perto) continue;
     const escala = 0.8 + Math.random() * 0.6;
@@ -492,7 +595,7 @@
     if (Math.abs(z) < 6 && Math.abs(x) < 200) continue; // evita a rua horizontal
     let pertoCasa = false;
     for (const c of casas) {
-      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 7.5) { pertoCasa = true; break; }
+      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 16) { pertoCasa = true; break; }
     }
     if (pertoCasa) continue;
     arbusto(x, z, 0.6 + Math.random() * 0.7);
@@ -617,7 +720,7 @@
     const z = (Math.random() - 0.5) * 180;
     if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
     let ok = true;
-    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 13) ok = false;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 19) ok = false;
     if (!ok) continue;
     criarChave(x, z);
     chavesColocadas++;
@@ -648,7 +751,7 @@
     const z = (Math.random() - 0.5) * 190;
     if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
     let ok = true;
-    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 11) ok = false;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 17) ok = false;
     if (!ok) continue;
     criarTufo(x, z);
     gramaColocada++;
@@ -679,7 +782,7 @@
     const z = (Math.random() - 0.5) * 200;
     if (Math.abs(x) < 6 || Math.abs(z) < 6) continue;
     let ok = true;
-    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 6.5) ok = false;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 16) ok = false;
     if (!ok) continue;
     criarTufoDecorativo(x, z, 0.7 + Math.random() * 0.6);
     decorColocada++;
@@ -1032,8 +1135,15 @@
       andando = true;
       const len = Math.hypot(dx, dz);
       dx /= len; dz /= len;
-      let newX = player.position.x + dx * speed * dt;
-      let newZ = player.position.z + dz * speed * dt;
+
+      // gira o vetor de movimento pelo ângulo atual da câmera (camYaw),
+      // assim "frente" é sempre para onde a câmera está olhando
+      const cosY = Math.cos(camYaw), senY = Math.sin(camYaw);
+      const dxCam = dx * cosY + dz * senY;
+      const dzCam = -dx * senY + dz * cosY;
+
+      let newX = player.position.x + dxCam * speed * dt;
+      let newZ = player.position.z + dzCam * speed * dt;
 
       let bloqueado = false;
       for (const c of casas) {
@@ -1044,7 +1154,7 @@
         player.position.x = Math.max(-105, Math.min(105, newX));
         player.position.z = Math.max(-105, Math.min(105, newZ));
       }
-      const alvoYaw = Math.atan2(dx, dz);
+      const alvoYaw = Math.atan2(dxCam, dzCam);
       let diff = alvoYaw - player.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       player.rotation.y += diff * Math.min(1, 12 * dt);
