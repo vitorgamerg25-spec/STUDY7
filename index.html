@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vizinhança - Mundo Aberto</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#8ecae6; font-family: 'Segoe UI', Arial, sans-serif; }
+  #app { position:relative; width:100vw; height:100vh; }
+  canvas { display:block; width:100%; height:100%; }
+
+  #hud {
+    position:absolute;
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    left: calc(14px + env(safe-area-inset-left, 0px));
+    color:#fff;
+    background:rgba(0,0,0,0.45); padding:10px 16px; border-radius:12px;
+    font-size:13px; line-height:1.6; max-width:230px;
+    backdrop-filter: blur(2px);
+  }
+  #hud b { color:#ffd166; }
+  #hud div span { float:right; margin-left:8px; }
+
+  #nameTag {
+    position:absolute;
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    left:50%; transform:translateX(-50%);
+    color:#fff; font-weight:700; font-size:20px;
+    text-shadow:0 0 8px rgba(0,0,0,0.85);
+    background:rgba(0,0,0,0.4); padding:6px 18px; border-radius:20px;
+    display:none;
+  }
+  #interactHint {
+    position:absolute;
+    bottom: calc(160px + env(safe-area-inset-bottom, 0px));
+    left:50%; transform:translateX(-50%);
+    color:#fff; font-weight:600; font-size:15px;
+    background:rgba(0,0,0,0.55); padding:8px 16px; border-radius:14px;
+    display:none;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { transform:translateX(-50%) scale(1); opacity:1; }
+    50% { transform:translateX(-50%) scale(1.06); opacity:0.85; }
+  }
+
+  #joystick {
+    position:absolute;
+    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+    left: calc(26px + env(safe-area-inset-left, 0px));
+    width:110px; height:110px;
+    border-radius:50%; background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.4);
+    display:none;
+    touch-action:none;
+  }
+  #stick {
+    position:absolute; top:35px; left:35px; width:40px; height:40px; border-radius:50%;
+    background:rgba(255,255,255,0.7);
+    transition: transform .12s ease, top .05s linear, left .05s linear;
+  }
+  #stick.released { transform: scale(1.25); }
+
+  @media (max-width:768px){ #joystick{ display:block; } }
+
+  #actionBtn {
+    position:absolute;
+    bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+    right: calc(30px + env(safe-area-inset-right, 0px));
+    width:74px; height:74px; border-radius:50%;
+    background:rgba(255,209,102,0.85); border:3px solid rgba(255,255,255,0.7);
+    color:#3a2a00; font-weight:800; font-size:13px;
+    display:none; align-items:center; justify-content:center;
+    box-shadow:0 4px 10px rgba(0,0,0,0.3);
+    user-select:none;
+  }
+  #actionBtn.show { display:flex; }
+  #actionBtn:active { transform:scale(0.92); }
+
+  #modalOverlay {
+    position:absolute; inset:0; background:rgba(0,0,0,0.55);
+    display:none; align-items:center; justify-content:center;
+    z-index:20;
+  }
+  #modalOverlay.show { display:flex; }
+  #modalCard {
+    background:#fffaf0; border-radius:18px; padding:26px 28px;
+    max-width:min(420px, 86vw); text-align:center;
+    box-shadow:0 12px 40px rgba(0,0,0,0.4);
+    border:4px solid #ffd166;
+    animation: popIn .25s ease;
+  }
+  @keyframes popIn {
+    from { transform:scale(0.85); opacity:0; }
+    to { transform:scale(1); opacity:1; }
+  }
+  #modalCard h2 { margin:0 0 8px; color:#5d4037; font-size:20px; }
+  #modalCard p { margin:0 0 18px; color:#5d4037; font-size:14px; line-height:1.5; }
+  #modalCard button {
+    background:#ff5722; color:#fff; border:none; padding:10px 22px;
+    border-radius:10px; font-weight:700; font-size:14px; cursor:pointer;
+  }
+
+  #winOverlay {
+    position:absolute; inset:0; background:rgba(0,0,0,0.7);
+    display:none; align-items:center; justify-content:center;
+    z-index:30;
+  }
+  #winOverlay.show { display:flex; }
+  #winCard {
+    background:linear-gradient(160deg,#fff59d,#ffd166);
+    border-radius:22px; padding:34px 32px; text-align:center;
+    box-shadow:0 16px 50px rgba(0,0,0,0.5);
+    animation: popIn .35s ease;
+  }
+  #winCard h1 { margin:0 0 6px; font-size:28px; color:#5d4037; }
+  #winCard p { margin:0 0 16px; color:#6d4c41; font-size:14px; }
+  #winCard button {
+    background:#2e7d32; color:#fff; border:none; padding:12px 26px;
+    border-radius:12px; font-weight:700; font-size:15px; cursor:pointer;
+  }
+
+  #toast {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    background:rgba(46,125,50,0.9); color:#fff; padding:8px 18px; border-radius:14px;
+    font-weight:700; font-size:14px; display:none; z-index:15;
+  }
+
+  #errorBanner {
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:#8ecae6; color:#1b1b1b; font-size:15px; text-align:center; padding:30px;
+    z-index:50;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <div><b>WASD</b>/setas — andar</div>
+    <div><b>E</b> — interagir</div>
+    <div style="margin-top:6px;">🔑 Chaves: <span id="hudChaves">0/6</span></div>
+    <div>🌿 Grama cortada: <span id="hudGrama">0/18</span></div>
+    <div>🏠 Casas visitadas: <span id="hudCasas">0/4</span></div>
+  </div>
+
+  <div id="nameTag"></div>
+  <div id="interactHint">Pressione <b>E</b></div>
+  <div id="toast"></div>
+
+  <div id="joystick"><div id="stick"></div></div>
+  <div id="actionBtn">AÇÃO</div>
+
+  <div id="modalOverlay">
+    <div id="modalCard">
+      <h2 id="modalTitle">Casa</h2>
+      <p id="modalBody">Conteúdo da casa aqui.</p>
+      <button id="modalClose">Fechar</button>
+    </div>
+  </div>
+
+  <div id="winOverlay">
+    <div id="winCard">
+      <h1>🎉 Vizinhança em ordem!</h1>
+      <p>Você achou todas as chaves, cortou toda a grama e visitou todas as casas.</p>
+      <button id="winClose">Continuar explorando</button>
+    </div>
+  </div>
+
+  <div id="errorBanner">
+    Não foi possível carregar o motor 3D (Three.js). Verifique sua conexão e recarregue a página.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+        onerror="document.getElementById('errorBanner').style.display='flex';"></script>
+<script>
+(function(){
+  if (typeof THREE === 'undefined') return;
+
+  const canvas = document.getElementById('canvas');
+  const nameTagEl = document.getElementById('nameTag');
+  const interactHintEl = document.getElementById('interactHint');
+  const actionBtn = document.getElementById('actionBtn');
+  const modalOverlay = document.getElementById('modalOverlay');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  const modalClose = document.getElementById('modalClose');
+  const winOverlay = document.getElementById('winOverlay');
+  const winClose = document.getElementById('winClose');
+  const toastEl = document.getElementById('toast');
+  const hudChaves = document.getElementById('hudChaves');
+  const hudGrama = document.getElementById('hudGrama');
+  const hudCasas = document.getElementById('hudCasas');
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.style.display = 'none', 1400);
+  }
+
+  // céu com gradiente (em vez de cor sólida)
+  function criarCeuGradiente() {
+    const c = document.createElement('canvas');
+    c.width = 2; c.height = 256;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#004fc9');
+    grad.addColorStop(0.55, '#1f8de8');
+    grad.addColorStop(1, '#7fc4f0');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 2, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
+  const scene = new THREE.Scene();
+  scene.background = criarCeuGradiente();
+  scene.fog = new THREE.Fog(0x2a5fb0, 170, 320);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 700);
+
+  const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.24));
+  const hemi = new THREE.HemisphereLight(0x6fb0ec, 0x4a8f2a, 0.42);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff0c0, 1.35);
+  sun.position.set(60, 90, 40);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -110;
+  sun.shadow.camera.right = 110;
+  sun.shadow.camera.top = 110;
+  sun.shadow.camera.bottom = -110;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 220;
+  sun.shadow.bias = -0.0015;
+  scene.add(sun);
+
+  // textura de grama procedural
+  function criarTexturaGrama() {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#3f9600';
+    ctx.fillRect(0, 0, size, size);
+    const tons = ['#2a7800', '#5fb824', '#1c5c00', '#3f9600'];
+    for (let i = 0; i < 2600; i++) {
+      ctx.fillStyle = tons[Math.floor(Math.random() * tons.length)];
+      const x = Math.random() * size, y = Math.random() * size;
+      const w = 1 + Math.random() * 2, h = 1 + Math.random() * 3;
+      ctx.globalAlpha = 0.35 + Math.random() * 0.4;
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.globalAlpha = 1;
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(22, 22);
+    return tex;
+  }
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(220, 220),
+    new THREE.MeshStandardMaterial({ map: criarTexturaGrama(), roughness: 1, metalness: 0 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // terreno de fundo (sustenta visualmente as montanhas além do gramado principal)
+  const terrenoFundo = new THREE.Mesh(
+    new THREE.CircleGeometry(260, 48),
+    new THREE.MeshStandardMaterial({ color: 0x357a1e, roughness: 1, metalness: 0 })
+  );
+  terrenoFundo.rotation.x = -Math.PI / 2;
+  terrenoFundo.position.y = -0.05;
+  terrenoFundo.receiveShadow = true;
+  scene.add(terrenoFundo);
+
+  function rua(w, h, x, z) {
+    const r = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: 0x5a5a5a, roughness: 0.85, metalness: 0.05 }));
+    r.rotation.x = -Math.PI / 2;
+    r.position.set(x, 0.01, z);
+    r.receiveShadow = true;
+    scene.add(r);
+  }
+  rua(9, 220, 0, 0);
+  rua(220, 9, 0, 0);
+
+  function faixa(x, z, horizontal) {
+    const geo = horizontal ? new THREE.PlaneGeometry(2.4, 0.3) : new THREE.PlaneGeometry(0.3, 2.4);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, 0.02, z);
+    scene.add(m);
+  }
+  for (let z = -100; z <= 100; z += 8) faixa(0, z, false);
+  for (let x = -100; x <= 100; x += 8) faixa(x, 0, true);
+
+  function cerca(cx, cz, raio) {
+    const postes = 14;
+    const matPoste = new THREE.MeshStandardMaterial({ color: 0xd7ccc8 });
+    for (let i = 0; i < postes; i++) {
+      const ang = (i / postes) * Math.PI * 2;
+      if (Math.abs(ang - Math.PI/2) < 0.35 || Math.abs(ang - (Math.PI*1.5)) < 0.35) continue;
+      const px = cx + Math.cos(ang) * raio;
+      const pz = cz + Math.sin(ang) * raio;
+      const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 6), matPoste);
+      poste.position.set(px, 0.55, pz);
+      poste.castShadow = true;
+      scene.add(poste);
+    }
+  }
+
+  function arbusto(x, z, escala) {
+    const s = escala || 1;
+    const g = new THREE.Group();
+    const matArbusto = new THREE.MeshStandardMaterial({ color: 0x2ecc21 });
+    const matArbustoClaro = new THREE.MeshStandardMaterial({ color: 0x4fe030 });
+    const nBolhas = 3 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < nBolhas; i++) {
+      const r = (0.55 + Math.random() * 0.35) * s;
+      const bolha = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), Math.random() < 0.5 ? matArbusto : matArbustoClaro);
+      bolha.position.set((Math.random()-0.5)*1.1*s, 0.55*s + Math.random()*0.3*s, (Math.random()-0.5)*1.1*s);
+      bolha.castShadow = true;
+      g.add(bolha);
+    }
+    g.position.set(x, 0, z);
+    scene.add(g);
+  }
+
+  // ---------- CASAS ----------
+  const chamines = []; // { particulas:[{mesh, vida, faseX}], escala }
+
+  function criarChamineComFumaca(g, s) {
+    const matTijolo = new THREE.MeshStandardMaterial({ color: 0x8d5a44 });
+    const chamine = new THREE.Mesh(new THREE.BoxGeometry(0.9*s, 2.6*s, 0.9*s), matTijolo);
+    chamine.position.set(2.2*s, 8.6*s, -1.4*s);
+    chamine.castShadow = true;
+    g.add(chamine);
+
+    // grupo de partículas de fumaça, reaproveitadas em loop (sobe, cresce e desaparece)
+    const grupoFumaca = new THREE.Group();
+    grupoFumaca.position.set(2.2*s, 10.0*s, -1.4*s);
+    g.add(grupoFumaca);
+
+    const matFumaca = new THREE.MeshBasicMaterial({ color: 0xe8e8e8, transparent: true, opacity: 0.5 });
+    const particulas = [];
+    const N = 5;
+    for (let i = 0; i < N; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.35*s, 6, 6), matFumaca.clone());
+      const vida0 = (i / N); // espalha as partículas ao longo do ciclo desde o início
+      p.position.y = vida0 * 3.2*s;
+      p.scale.setScalar(0.4 + vida0 * 0.8);
+      grupoFumaca.add(p);
+      particulas.push({ mesh: p, vida: vida0, faseX: Math.random() * Math.PI * 2 });
+    }
+    chamines.push({ particulas, escala: s });
+  }
+
+  function casa(x, z, corParede, corTelhado, nome, conteudo, escala, giroTelhado) {
+    const g = new THREE.Group();
+    const s = escala || 1;
+
+    const parede = new THREE.Mesh(
+      new THREE.BoxGeometry(8*s, 6*s, 8*s),
+      new THREE.MeshStandardMaterial({ color: corParede })
+    );
+    parede.position.y = 3*s;
+    parede.castShadow = true;
+    parede.receiveShadow = true;
+    g.add(parede);
+
+    const telhado = new THREE.Mesh(
+      new THREE.ConeGeometry(6.6*s, 4*s, 4),
+      new THREE.MeshStandardMaterial({ color: corTelhado })
+    );
+    telhado.position.y = 8*s;
+    telhado.rotation.y = giroTelhado || Math.PI / 4;
+    telhado.castShadow = true;
+    g.add(telhado);
+
+    const porta = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6*s, 3*s, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x5d4037 })
+    );
+    porta.position.set(0, 1.5*s, 4.1*s);
+    g.add(porta);
+
+    const janelaGeo = new THREE.BoxGeometry(1.3*s, 1.3*s, 0.15);
+    const janelaMat = new THREE.MeshStandardMaterial({ color: 0xbbdefb });
+    const j1 = new THREE.Mesh(janelaGeo, janelaMat); j1.position.set(-2.4*s, 3.5*s, 4.05*s);
+    const j2 = new THREE.Mesh(janelaGeo, janelaMat); j2.position.set(2.4*s, 3.5*s, 4.05*s);
+    g.add(j1); g.add(j2);
+
+    criarChamineComFumaca(g, s);
+
+    g.position.set(x, 0, z);
+    g.userData = {
+      nome: nome, cx: x, cz: z,
+      raio: 5.7*s + 1.0,
+      raioInteracao: 6.5*s + 2.5,
+      visitada: false,
+      conteudo: conteudo
+    };
+    scene.add(g);
+    cerca(x, z, 6.4*s);
+    return g;
+  }
+
+  const casas = [
+    casa(-32, -32, 0xff1a1a, 0xd50000, "Casa 1", "Dona Rosa agradece a visita e comenta que o jardim está mais bonito depois que você cortou a grama.", 1.0, Math.PI/4),
+    casa(32, -32, 0x0080ff, 0x0d47a1, "Casa 2", "Seu Antônio conta uma história antiga do bairro enquanto toma um cafezinho na varanda.", 1.08, Math.PI/6),
+    casa(-32, 32, 0xffdd00, 0xff9800, "Casa 3", "As crianças da casa mostram o cachorro novo e pedem para você achar a bolinha perdida.", 0.95, Math.PI/3),
+    casa(32, 32, 0x14e64a, 0x1b8a2f, "Casa 4", "O vizinho comenta que perdeu uma chave e agradece se você encontrar por aí.", 1.0, -Math.PI/5),
+  ];
+  let visitadas = 0;
+
+  // ---------- ÁRVORES (mais variedade e mais quantidade) ----------
+  const folhasVento = []; // { mesh, faseVento, amplitude } — usadas no loop de animação para balançar com o vento
+  function arvoreRedonda(x, z, escala) {
+    const s = escala || 1;
+    const g = new THREE.Group();
+    const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.4*s, 0.5*s, 3*s, 6), new THREE.MeshStandardMaterial({ color: 0x6d4c41 }));
+    tronco.position.y = 1.5*s;
+    tronco.castShadow = true;
+    const folhas = new THREE.Mesh(new THREE.SphereGeometry(2.1*s, 8, 8), new THREE.MeshStandardMaterial({ color: 0x28e028 }));
+    folhas.position.y = 3.7*s;
+    folhas.castShadow = true;
+    g.add(tronco); g.add(folhas);
+    g.position.set(x, 0, z);
+    scene.add(g);
+    folhasVento.push({ mesh: folhas, faseVento: Math.random() * Math.PI * 2, amplitude: 0.06 + Math.random() * 0.03 });
+  }
+  function arvorePinheiro(x, z, escala) {
+    const s = escala || 1;
+    const g = new THREE.Group();
+    const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.3*s, 0.4*s, 2*s, 6), new THREE.MeshStandardMaterial({ color: 0x5d4037 }));
+    tronco.position.y = 1*s;
+    tronco.castShadow = true;
+    g.add(tronco);
+    const niveis = 3;
+    const grupoFolhas = new THREE.Group();
+    for (let i = 0; i < niveis; i++) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry((1.8 - i*0.4)*s, 2.2*s, 8), new THREE.MeshStandardMaterial({ color: 0x0fb32a }));
+      cone.position.y = (2.2 + i*1.4) * s;
+      cone.castShadow = true;
+      grupoFolhas.add(cone);
+    }
+    g.add(grupoFolhas);
+    g.position.set(x, 0, z);
+    scene.add(g);
+    folhasVento.push({ mesh: grupoFolhas, faseVento: Math.random() * Math.PI * 2, amplitude: 0.03 + Math.random() * 0.02 });
+  }
+
+  let plantadas = 0, tentativasArv = 0;
+  while (plantadas < 42 && tentativasArv < 800) {
+    tentativasArv++;
+    const x = (Math.random() - 0.5) * 190;
+    const z = (Math.random() - 0.5) * 190;
+    if (Math.abs(x) < 12 || Math.abs(z) < 12) continue;
+    let perto = false;
+    for (const c of casas) {
+      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 12) { perto = true; break; }
+    }
+    if (perto) continue;
+    const escala = 0.8 + Math.random() * 0.6;
+    if (Math.random() < 0.45) arvorePinheiro(x, z, escala);
+    else arvoreRedonda(x, z, escala);
+    if (Math.random() < 0.5) arbusto(x + (Math.random()-0.5)*3, z + (Math.random()-0.5)*3);
+    plantadas++;
+  }
+
+  // arbustos extras espalhados livremente (mais densidade visual, inclusive perto de cercas/casas)
+  let arbustosExtras = 0, tentativasArbusto = 0;
+  while (arbustosExtras < 90 && tentativasArbusto < 1200) {
+    tentativasArbusto++;
+    const x = (Math.random() - 0.5) * 195;
+    const z = (Math.random() - 0.5) * 195;
+    if (Math.abs(x) < 6 && Math.abs(z) < 200) continue; // evita a rua vertical
+    if (Math.abs(z) < 6 && Math.abs(x) < 200) continue; // evita a rua horizontal
+    let pertoCasa = false;
+    for (const c of casas) {
+      if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 7.5) { pertoCasa = true; break; }
+    }
+    if (pertoCasa) continue;
+    arbusto(x, z, 0.6 + Math.random() * 0.7);
+    arbustosExtras++;
+  }
+
+  // ---------- NUVENS ANIMADAS ----------
+  const nuvens = []; // { grupo, velocidade }
+  function criarNuvem(x, y, z, escala) {
+    const s = escala || 1;
+    const g = new THREE.Group();
+    const matNuvem = new THREE.MeshStandardMaterial({ color: 0xf4f8ff, roughness: 0.9, metalness: 0 });
+    const nBolhas = 4 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < nBolhas; i++) {
+      const r = (1.3 + Math.random() * 1.3) * s;
+      const bolha = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), matNuvem);
+      bolha.position.set((Math.random()-0.5)*5*s, (Math.random()-0.5)*0.8*s, (Math.random()-0.5)*2.6*s);
+      bolha.scale.y = 0.7;
+      g.add(bolha);
+    }
+    g.position.set(x, y, z);
+    scene.add(g);
+    nuvens.push({ grupo: g, velocidade: 0.6 + Math.random() * 0.9, limiteX: 175 });
+  }
+  for (let i = 0; i < 16; i++) {
+    const x = (Math.random() - 0.5) * 340;
+    const z = (Math.random() - 0.5) * 340;
+    const y = 55 + Math.random() * 35;
+    criarNuvem(x, y, z, 2 + Math.random() * 2.5);
+  }
+
+  // ---------- MONTANHAS AO REDOR DO MAPA ----------
+  function criarMontanha(x, z, altura, raioBase, comNeve) {
+    const g = new THREE.Group();
+
+    const rochaMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5c, roughness: 1, metalness: 0 });
+    const rochaMatEscura = new THREE.MeshStandardMaterial({ color: 0x6b5d51, roughness: 1, metalness: 0 });
+    const neveMat = new THREE.MeshStandardMaterial({ color: 0xf5f8fb, roughness: 0.9, metalness: 0 });
+
+    // pico principal levemente irregular (cone com poucos segmentos = arestas rochosas)
+    const pico = new THREE.Mesh(new THREE.ConeGeometry(raioBase, altura, 7), rochaMat);
+    pico.position.y = altura / 2;
+    pico.rotation.y = Math.random() * Math.PI;
+    pico.castShadow = false;
+    pico.receiveShadow = true;
+    g.add(pico);
+
+    // "ombro" lateral pra quebrar a simetria de cone único
+    const ombro = new THREE.Mesh(new THREE.ConeGeometry(raioBase * 0.65, altura * 0.7, 6), rochaMatEscura);
+    ombro.position.set(raioBase * 0.45, altura * 0.35, raioBase * 0.2);
+    ombro.rotation.y = Math.random() * Math.PI;
+    ombro.receiveShadow = true;
+    g.add(ombro);
+
+    if (comNeve) {
+      const neve = new THREE.Mesh(new THREE.ConeGeometry(raioBase * 0.38, altura * 0.32, 7), neveMat);
+      neve.position.y = altura * 0.82;
+      neve.rotation.y = pico.rotation.y;
+      g.add(neve);
+    }
+
+    g.position.set(x, 0, z);
+    scene.add(g);
+  }
+
+  function gerarCadeiaMontanhas() {
+    const raioAnel = 145;
+    const qtd = 30;
+    for (let i = 0; i < qtd; i++) {
+      const ang = (i / qtd) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const raio = raioAnel + (Math.random() - 0.5) * 22;
+      const x = Math.cos(ang) * raio;
+      const z = Math.sin(ang) * raio;
+      const altura = 32 + Math.random() * 40;
+      const base = 20 + Math.random() * 16;
+      criarMontanha(x, z, altura, base, altura > 48);
+    }
+    // segunda fileira mais distante e mais alta, reforça a sensação de vale
+    const qtdFundo = 20;
+    for (let i = 0; i < qtdFundo; i++) {
+      const ang = (i / qtdFundo) * Math.PI * 2 + 0.15;
+      const raio = 190 + Math.random() * 25;
+      const x = Math.cos(ang) * raio;
+      const z = Math.sin(ang) * raio;
+      const altura = 50 + Math.random() * 55;
+      const base = 26 + Math.random() * 18;
+      criarMontanha(x, z, altura, base, true);
+    }
+  }
+  gerarCadeiaMontanhas();
+
+
+  const chaves = [];
+  const TOTAL_CHAVES = 6;
+  function criarChave(x, z) {
+    const g = new THREE.Group();
+    const anelGeo = new THREE.TorusGeometry(0.35, 0.09, 8, 16);
+    const matOuro = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, roughness: 0.3, emissive: 0x554400, emissiveIntensity: 0.3 });
+    const anel = new THREE.Mesh(anelGeo, matOuro);
+    anel.rotation.x = Math.PI / 2;
+    g.add(anel);
+    const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.7, 8), matOuro);
+    haste.rotation.z = Math.PI / 2;
+    haste.position.x = 0.5;
+    g.add(haste);
+    const dente1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.1), matOuro);
+    dente1.position.set(0.8, -0.15, 0);
+    const dente2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.1), matOuro);
+    dente2.position.set(0.95, -0.1, 0);
+    g.add(dente1); g.add(dente2);
+
+    g.position.set(x, 1.1, z);
+    g.userData = { coletada: false, baseY: 1.1, faseFlutuar: Math.random() * Math.PI * 2, animColeta: 0 };
+    g.castShadow = true;
+    scene.add(g);
+    chaves.push(g);
+  }
+  let chavesColocadas = 0, tentativasChave = 0;
+  while (chavesColocadas < TOTAL_CHAVES && tentativasChave < 400) {
+    tentativasChave++;
+    const x = (Math.random() - 0.5) * 180;
+    const z = (Math.random() - 0.5) * 180;
+    if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
+    let ok = true;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 13) ok = false;
+    if (!ok) continue;
+    criarChave(x, z);
+    chavesColocadas++;
+  }
+  let totalChavesColetadas = 0;
+
+  // ---------- GRAMA ALTA PARA CORTAR ----------
+  const tufos = [];
+  const TOTAL_GRAMA = 18;
+  function criarTufo(x, z) {
+    const g = new THREE.Group();
+    const matGramaAlta = new THREE.MeshStandardMaterial({ color: 0x6cb814 });
+    for (let i = 0; i < 5; i++) {
+      const lamina = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.9 + Math.random()*0.4, 4), matGramaAlta);
+      lamina.position.set((Math.random()-0.5)*0.6, 0.45, (Math.random()-0.5)*0.6);
+      lamina.rotation.z = (Math.random()-0.5)*0.3;
+      g.add(lamina);
+    }
+    g.position.set(x, 0, z);
+    g.userData = { cortada: false, faseVento: Math.random() * Math.PI * 2 };
+    scene.add(g);
+    tufos.push(g);
+  }
+  let gramaColocada = 0, tentativasGrama = 0;
+  while (gramaColocada < TOTAL_GRAMA && tentativasGrama < 500) {
+    tentativasGrama++;
+    const x = (Math.random() - 0.5) * 190;
+    const z = (Math.random() - 0.5) * 190;
+    if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
+    let ok = true;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 11) ok = false;
+    if (!ok) continue;
+    criarTufo(x, z);
+    gramaColocada++;
+  }
+  let totalGramaCortada = 0;
+
+  // grama decorativa extra (não colecionável), só pra deixar o chão mais vivo e denso
+  const decorGrama = [];
+  function criarTufoDecorativo(x, z, escala) {
+    const s = escala || 1;
+    const g = new THREE.Group();
+    const matGramaAlta = new THREE.MeshStandardMaterial({ color: Math.random() < 0.5 ? 0x6cb814 : 0x559e0d });
+    for (let i = 0; i < 4; i++) {
+      const lamina = new THREE.Mesh(new THREE.ConeGeometry(0.07*s, (0.6 + Math.random()*0.35)*s, 4), matGramaAlta);
+      lamina.position.set((Math.random()-0.5)*0.5*s, 0.32*s, (Math.random()-0.5)*0.5*s);
+      lamina.rotation.z = (Math.random()-0.5)*0.3;
+      g.add(lamina);
+    }
+    g.position.set(x, 0, z);
+    g.userData = { faseVento: Math.random() * Math.PI * 2 };
+    scene.add(g);
+    decorGrama.push(g);
+  }
+  let decorColocada = 0, tentativasDecor = 0;
+  while (decorColocada < 160 && tentativasDecor < 2000) {
+    tentativasDecor++;
+    const x = (Math.random() - 0.5) * 200;
+    const z = (Math.random() - 0.5) * 200;
+    if (Math.abs(x) < 6 || Math.abs(z) < 6) continue;
+    let ok = true;
+    for (const c of casas) if (Math.hypot(x - c.userData.cx, z - c.userData.cz) < 6.5) ok = false;
+    if (!ok) continue;
+    criarTufoDecorativo(x, z, 0.7 + Math.random() * 0.6);
+    decorColocada++;
+  }
+
+  // ---------- PERSONAGEM REALISTA ----------
+  const player = new THREE.Group();
+
+  // Helper: "cápsula" (cilindro + esferas nas pontas) já que CapsuleGeometry
+  // não existe na versão do Three.js usada aqui (r128)
+  function criarCapsula(raio, altura, mat) {
+    const g = new THREE.Group();
+    const corpo = new THREE.Mesh(new THREE.CylinderGeometry(raio, raio, altura, 8), mat);
+    corpo.castShadow = true;
+    g.add(corpo);
+    const topo = new THREE.Mesh(new THREE.SphereGeometry(raio, 8, 8), mat);
+    topo.position.y = altura / 2;
+    topo.castShadow = true;
+    g.add(topo);
+    const base = new THREE.Mesh(new THREE.SphereGeometry(raio, 8, 8), mat);
+    base.position.y = -altura / 2;
+    base.castShadow = true;
+    g.add(base);
+    return g;
+  }
+
+  const peleMat = new THREE.MeshStandardMaterial({ color: 0xf0c8a0 });
+  const camisaMat = new THREE.MeshStandardMaterial({ color: 0x3f51b5 });
+  const calçaMat = new THREE.MeshStandardMaterial({ color: 0x37474f });
+  const sapatoMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b });
+  const cabeloMat = new THREE.MeshStandardMaterial({ color: 0x3e2723 });
+
+  // Tronco (levemente afunilado, mais orgânico que um cilindro reto)
+  const tronco = criarCapsula(0.28, 0.55, camisaMat);
+  tronco.position.y = 1.15;
+  player.add(tronco);
+
+  // Quadril
+  const quadril = new THREE.Mesh(new THREE.SphereGeometry(0.27, 8, 8), calçaMat);
+  quadril.position.y = 0.78;
+  quadril.scale.set(1, 0.7, 1);
+  quadril.castShadow = true;
+  player.add(quadril);
+
+  // Cabeça
+  const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 12), peleMat);
+  cabeca.position.y = 1.78;
+  cabeca.castShadow = true;
+  player.add(cabeca);
+
+  // Cabelo (calota)
+  const cabelo = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 12, 0, Math.PI*2, 0, Math.PI*0.55), cabeloMat);
+  cabelo.position.y = 1.86;
+  cabelo.castShadow = true;
+  player.add(cabelo);
+
+  // Pescoço
+  const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 8), peleMat);
+  pescoco.position.y = 1.6;
+  player.add(pescoco);
+
+  // Braços (grupo para poder animar rotação no ombro)
+  function criarBraco(lado) {
+    const grupoBraco = new THREE.Group();
+    grupoBraco.position.set(lado * 0.36, 1.42, 0);
+
+    const bracoSup = criarCapsula(0.09, 0.32, camisaMat);
+    bracoSup.position.y = -0.2;
+    grupoBraco.add(bracoSup);
+
+    const antebraco = criarCapsula(0.075, 0.3, peleMat);
+    antebraco.position.y = -0.52;
+    grupoBraco.add(antebraco);
+
+    const mao = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), peleMat);
+    mao.position.y = -0.72;
+    grupoBraco.add(mao);
+
+    player.add(grupoBraco);
+    return grupoBraco;
+  }
+  const bracoEsq = criarBraco(-1);
+  const bracoDir = criarBraco(1);
+
+  // Pernas
+  function criarPerna(lado) {
+    const grupoPerna = new THREE.Group();
+    grupoPerna.position.set(lado * 0.13, 0.78, 0);
+
+    const coxa = criarCapsula(0.12, 0.35, calçaMat);
+    coxa.position.y = -0.2;
+    grupoPerna.add(coxa);
+
+    const canela = criarCapsula(0.1, 0.33, calçaMat);
+    canela.position.y = -0.56;
+    grupoPerna.add(canela);
+
+    const pe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.24), sapatoMat);
+    pe.position.set(0, -0.76, 0.05);
+    pe.castShadow = true;
+    grupoPerna.add(pe);
+
+    player.add(grupoPerna);
+    return grupoPerna;
+  }
+  const pernaEsq = criarPerna(-1);
+  const pernaDir = criarPerna(1);
+
+  player.position.set(0, 0, 0);
+  scene.add(player);
+
+  // controles teclado
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+    keys[k] = true;
+    if ((k === 'e' || k === ' ') && !modalOverlay.classList.contains('show')) {
+      tentarEntrar();
+    }
+  }, { passive: false });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  // joystick virtual
+  let joyVec = { x: 0, z: 0 };
+  const joystick = document.getElementById('joystick');
+  const stick = document.getElementById('stick');
+  let joyActive = false, joyCenter = { x: 0, y: 0 };
+
+  function joyStart(e) {
+    joyActive = true;
+    stick.classList.remove('released');
+    const r = joystick.getBoundingClientRect();
+    joyCenter = { x: r.left + r.width/2, y: r.top + r.height/2 };
+  }
+  function joyMove(e) {
+    if (!joyActive) return;
+    const t = e.touches ? e.touches[0] : e;
+    let dx = t.clientX - joyCenter.x;
+    let dy = t.clientY - joyCenter.y;
+    const max = 35;
+    const len = Math.hypot(dx, dy) || 1;
+    if (len > max) { dx = dx/len*max; dy = dy/len*max; }
+    stick.style.left = (35 + dx) + 'px';
+    stick.style.top = (35 + dy) + 'px';
+    joyVec.x = dx / max;
+    joyVec.z = dy / max;
+  }
+  function joyEnd() {
+    joyActive = false;
+    joyVec = { x: 0, z: 0 };
+    stick.style.left = '35px';
+    stick.style.top = '35px';
+    stick.classList.add('released');
+    setTimeout(() => stick.classList.remove('released'), 180);
+  }
+  joystick.addEventListener('touchstart', joyStart, { passive: true });
+  joystick.addEventListener('touchmove', joyMove, { passive: true });
+  joystick.addEventListener('touchend', joyEnd);
+
+  actionBtn.addEventListener('touchstart', (e) => { e.preventDefault(); tentarEntrar(); }, { passive:false });
+  actionBtn.addEventListener('click', tentarEntrar);
+
+  let casaAberta = null;
+  let jogoVencido = false;
+
+  function tentarEntrar() {
+    if (!casaAberta) return;
+    abrirModal(casaAberta);
+  }
+
+  function abrirModal(c) {
+    modalTitle.textContent = c.userData.nome;
+    modalBody.textContent = c.userData.conteudo;
+    modalOverlay.classList.add('show');
+    if (!c.userData.visitada) {
+      c.userData.visitada = true;
+      visitadas++;
+      hudCasas.textContent = visitadas + '/4';
+      checarVitoria();
+    }
+  }
+  modalClose.addEventListener('click', () => modalOverlay.classList.remove('show'));
+  winClose.addEventListener('click', () => winOverlay.classList.remove('show'));
+
+  function checarVitoria() {
+    if (jogoVencido) return;
+    if (visitadas >= 4 && totalChavesColetadas >= TOTAL_CHAVES && totalGramaCortada >= TOTAL_GRAMA) {
+      jogoVencido = true;
+      setTimeout(() => winOverlay.classList.add('show'), 400);
+    }
+  }
+
+  // ---------- ANIMAIS ----------
+
+  // 1) Pássaros voando em círculo no céu
+  const passaros = [];
+  function criarPassaro(cx, cz, altura, raio) {
+    const g = new THREE.Group();
+    const matCorpo = new THREE.MeshStandardMaterial({ color: [0x3a3a3a, 0x8b5a2b, 0xd94848][Math.floor(Math.random()*3)] });
+    const corpo = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.6, 5), matCorpo);
+    corpo.rotation.x = Math.PI / 2;
+    g.add(corpo);
+    const asaEsq = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 4), matCorpo);
+    asaEsq.rotation.z = Math.PI / 2;
+    asaEsq.position.set(-0.3, 0, 0);
+    const asaDir = asaEsq.clone();
+    asaDir.position.set(0.3, 0, 0);
+    g.add(asaEsq); g.add(asaDir);
+    scene.add(g);
+    passaros.push({ grupo: g, asaEsq, asaDir, cx, cz, altura, raio, ang: Math.random()*Math.PI*2, vel: 0.35 + Math.random()*0.3 });
+  }
+  for (let i = 0; i < 8; i++) {
+    criarPassaro((Math.random()-0.5)*140, (Math.random()-0.5)*140, 26 + Math.random()*14, 12 + Math.random()*18);
+  }
+
+  // 2) Borboletas esvoaçando perto de árvores e arbustos
+  const borboletas = [];
+  function criarBorboleta(cx, cz) {
+    const g = new THREE.Group();
+    const cor = [0xffb703, 0xff5fa0, 0x9d4edd, 0xffffff][Math.floor(Math.random()*4)];
+    const matAsa = new THREE.MeshStandardMaterial({ color: cor, side: THREE.DoubleSide, emissive: cor, emissiveIntensity: 0.15 });
+    const asaEsq = new THREE.Mesh(new THREE.CircleGeometry(0.18, 8), matAsa);
+    asaEsq.position.x = -0.15;
+    const asaDir = new THREE.Mesh(new THREE.CircleGeometry(0.18, 8), matAsa);
+    asaDir.position.x = 0.15;
+    g.add(asaEsq); g.add(asaDir);
+    g.position.set(cx, 1.2 + Math.random()*1.5, cz);
+    scene.add(g);
+    borboletas.push({ grupo: g, asaEsq, asaDir, cx, cz, fase: Math.random()*Math.PI*2, raio: 1.5 + Math.random()*2, altBase: g.position.y });
+  }
+  for (let i = 0; i < 14; i++) {
+    criarBorboleta((Math.random()-0.5)*160, (Math.random()-0.5)*160);
+  }
+
+  // 3) Coelhos pulando pela grama
+  const coelhos = [];
+  function criarCoelho(x, z) {
+    const g = new THREE.Group();
+    const corPele = [0xf2ece1, 0xb98a5a, 0x8a8a8a, 0xe8d2b0][Math.floor(Math.random()*4)];
+    const matPele = new THREE.MeshStandardMaterial({ color: corPele });
+    const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), matPele);
+    corpo.scale.set(1, 0.85, 1.3);
+    corpo.position.y = 0.32;
+    const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), matPele);
+    cabeca.position.set(0, 0.5, 0.35);
+    const orelhaEsq = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.34, 6), matPele);
+    orelhaEsq.position.set(-0.08, 0.78, 0.35);
+    const orelhaDir = orelhaEsq.clone();
+    orelhaDir.position.set(0.08, 0.78, 0.35);
+    g.add(corpo); g.add(cabeca); g.add(orelhaEsq); g.add(orelhaDir);
+    g.castShadow = true;
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.position.set(x, 0, z);
+    scene.add(g);
+    coelhos.push({
+      grupo: g, base: new THREE.Vector3(x, 0, z), alvo: new THREE.Vector3(x, 0, z),
+      faseSalto: Math.random()*Math.PI*2, esperando: Math.random()*3, dirAtual: new THREE.Vector3(1,0,0)
+    });
+  }
+  for (let i = 0; i < 6; i++) {
+    let x = (Math.random()-0.5)*150, z = (Math.random()-0.5)*150;
+    while (Math.abs(x) < 8 || Math.abs(z) < 8) { x = (Math.random()-0.5)*150; z = (Math.random()-0.5)*150; }
+    criarCoelho(x, z);
+  }
+
+  // ---------- VENTO: PARTÍCULAS NO AR (poeira/pólen flutuando) ----------
+  const particulasAr = [];
+  {
+    const N = 220;
+    const coresParticula = [0xfff6d8, 0xffd6f0, 0xd6f0ff, 0xe4ffd6, 0xffe9b8];
+    const geoParticula = new THREE.SphereGeometry(0.06, 4, 4);
+    for (let i = 0; i < N; i++) {
+      const matParticula = new THREE.MeshBasicMaterial({
+        color: coresParticula[Math.floor(Math.random()*coresParticula.length)],
+        transparent: true, opacity: 0.45 + Math.random()*0.25
+      });
+      const p = new THREE.Mesh(geoParticula, matParticula);
+      p.position.set((Math.random()-0.5)*220, 0.5 + Math.random()*18, (Math.random()-0.5)*220);
+      scene.add(p);
+      particulasAr.push({
+        mesh: p, faseY: Math.random()*Math.PI*2, faseX: Math.random()*Math.PI*2,
+        velVento: 1.2 + Math.random()*1.6, alturaBase: p.position.y
+      });
+    }
+  }
+  const ventoDir = new THREE.Vector3(1, 0, 0.35).normalize();
+
+  // ---------- CÂMERA CONTROLADA PELO JOGADOR (arraste para orbitar) ----------
+  let camYaw = 0;          // ângulo horizontal ao redor do jogador
+  let camPitch = 0.38;     // 0 = rasante, 1 = de cima
+  let arrastando = false;
+  let ultimoPonteiro = { x: 0, y: 0 };
+  const canvasEl = document.getElementById('canvas');
+
+  function alvoEhControleUI(target) {
+    return !!(target.closest && target.closest('#joystick, #actionBtn, #modalOverlay, #winOverlay, #hud'));
+  }
+  function camDragStart(x, y, target) {
+    if (alvoEhControleUI(target)) return;
+    arrastando = true;
+    ultimoPonteiro = { x, y };
+  }
+  function camDragMove(x, y) {
+    if (!arrastando) return;
+    const dx = x - ultimoPonteiro.x;
+    const dy = y - ultimoPonteiro.y;
+    ultimoPonteiro = { x, y };
+    camYaw -= dx * 0.006;
+    camPitch = Math.max(0.08, Math.min(0.95, camPitch - dy * 0.004));
+  }
+  function camDragEnd() { arrastando = false; }
+
+  canvasEl.addEventListener('mousedown', (e) => camDragStart(e.clientX, e.clientY, e.target));
+  window.addEventListener('mousemove', (e) => camDragMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', camDragEnd);
+
+  canvasEl.addEventListener('touchstart', (e) => {
+    const tt = e.touches[0];
+    camDragStart(tt.clientX, tt.clientY, e.target);
+  }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (!arrastando) return;
+    const tt = e.touches[0];
+    camDragMove(tt.clientX, tt.clientY);
+  }, { passive: true });
+  window.addEventListener('touchend', camDragEnd);
+
+  const speed = 18;
+  const clock = new THREE.Clock();
+  let tempoAnim = 0;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const pausado = modalOverlay.classList.contains('show') || winOverlay.classList.contains('show');
+
+    let dx = joyVec.x, dz = joyVec.z;
+    if (!pausado) {
+      if (keys['w'] || keys['arrowup']) dz -= 1;
+      if (keys['s'] || keys['arrowdown']) dz += 1;
+      if (keys['a'] || keys['arrowleft']) dx -= 1;
+      if (keys['d'] || keys['arrowright']) dx += 1;
+    } else {
+      dx = 0; dz = 0;
+    }
+
+    let andando = false;
+    if (dx !== 0 || dz !== 0) {
+      andando = true;
+      const len = Math.hypot(dx, dz);
+      dx /= len; dz /= len;
+      let newX = player.position.x + dx * speed * dt;
+      let newZ = player.position.z + dz * speed * dt;
+
+      let bloqueado = false;
+      for (const c of casas) {
+        const dist = Math.hypot(newX - c.userData.cx, newZ - c.userData.cz);
+        if (dist < c.userData.raio) { bloqueado = true; break; }
+      }
+      if (!bloqueado) {
+        player.position.x = Math.max(-105, Math.min(105, newX));
+        player.position.z = Math.max(-105, Math.min(105, newZ));
+      }
+      const alvoYaw = Math.atan2(dx, dz);
+      let diff = alvoYaw - player.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      player.rotation.y += diff * Math.min(1, 12 * dt);
+    }
+
+    // animação de caminhada (balanço de pernas e braços)
+    if (andando) {
+      tempoAnim += dt * 8;
+    } else {
+      tempoAnim += (0 - tempoAnim) * 0.2 * dt * 60; // relaxa suavemente
+    }
+    const balanco = Math.sin(tempoAnim) * (andando ? 0.55 : 0);
+    pernaEsq.rotation.x = balanco;
+    pernaDir.rotation.x = -balanco;
+    bracoEsq.rotation.x = -balanco * 0.8;
+    bracoDir.rotation.x = balanco * 0.8;
+
+    // respiração suave no idle (peito sobe e desce devagar)
+    const respiracao = andando ? 0 : Math.sin(tempoGlobal() * 1.8) * 0.012;
+    tronco.position.y = 1.15 + (andando ? Math.abs(Math.sin(tempoAnim*2)) * 0.02 : respiracao);
+    cabeca.position.y = 1.78 + (andando ? 0 : respiracao * 0.6);
+
+    // câmera terceira pessoa orbital: o jogador arrasta a tela (ou o mouse) para girar ao redor do personagem
+    const bobCamera = andando ? Math.sin(tempoAnim * 2) * 0.15 : 0;
+    const distHoriz = 15 * Math.cos(camPitch * 1.2);
+    const alturaCam = 4 + camPitch * 16 + bobCamera;
+    const camOffset = new THREE.Vector3(Math.sin(camYaw) * distHoriz, alturaCam, Math.cos(camYaw) * distHoriz);
+    const desired = player.position.clone().add(camOffset);
+    camera.position.lerp(desired, 0.15);
+    const alvoLook = new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
+    camera.lookAt(alvoLook);
+
+    // proximidade das casas
+    let perto = null;
+    for (const c of casas) {
+      const dist = Math.hypot(player.position.x - c.userData.cx, player.position.z - c.userData.cz);
+      if (dist < c.userData.raioInteracao) perto = c;
+    }
+    casaAberta = perto;
+    if (perto && !pausado) {
+      nameTagEl.style.display = 'block';
+      nameTagEl.textContent = perto.userData.nome + (perto.userData.visitada ? ' ✓' : '');
+      interactHintEl.style.display = 'block';
+      actionBtn.classList.add('show');
+    } else {
+      nameTagEl.style.display = 'none';
+      interactHintEl.style.display = 'none';
+      actionBtn.classList.remove('show');
+    }
+
+    // coletar chaves automaticamente ao chegar perto
+    if (!pausado) {
+      for (const ch of chaves) {
+        if (ch.userData.coletada) {
+          // animação de coleta em andamento
+          ch.userData.animColeta += dt * 3.2;
+          ch.position.y += dt * 2.2;
+          ch.rotation.y += dt * 14;
+          const escala = Math.max(0, 1 - ch.userData.animColeta);
+          ch.scale.setScalar(escala);
+          if (escala <= 0.01) scene.remove(ch);
+          continue;
+        }
+        ch.rotation.y += dt * 2.5;
+        ch.position.y = ch.userData.baseY + Math.sin(tempoGlobal() + ch.userData.faseFlutuar) * 0.12;
+        const dist = Math.hypot(player.position.x - ch.position.x, player.position.z - ch.position.z);
+        if (dist < 1.4) {
+          ch.userData.coletada = true;
+          totalChavesColetadas++;
+          hudChaves.textContent = totalChavesColetadas + '/' + TOTAL_CHAVES;
+          toast('🔑 Chave encontrada!');
+          checarVitoria();
+        }
+      }
+
+      // cortar grama automaticamente ao passar perto
+      for (const t of tufos) {
+        const dist = Math.hypot(player.position.x - t.position.x, player.position.z - t.position.z);
+        if (!t.userData.cortada) {
+          // balanço de vento suave enquanto não foi cortada
+          t.rotation.z = Math.sin(tempoGlobal() * 1.6 + t.userData.faseVento) * 0.12;
+          if (dist < 1.6) {
+            t.userData.cortada = true;
+            totalGramaCortada++;
+            hudGrama.textContent = totalGramaCortada + '/' + TOTAL_GRAMA;
+            checarVitoria();
+          }
+        } else if (t.scale.y > 0.08) {
+          // animação de corte: encolhe suavemente em vez de sumir instantaneamente
+          t.scale.y = Math.max(0.08, t.scale.y - dt * 3.2);
+          t.position.y = -0.15 * (1 - t.scale.y);
+        }
+      }
+    }
+
+    // balanço das folhas das árvores com o vento
+    const t = tempoGlobal();
+    for (const f of folhasVento) {
+      f.mesh.rotation.z = Math.sin(t * 1.1 + f.faseVento) * f.amplitude;
+      f.mesh.rotation.x = Math.cos(t * 0.9 + f.faseVento) * f.amplitude * 0.6;
+    }
+
+    // nuvens deslizando pelo céu, reaparecendo do outro lado ao sair do limite
+    for (const n of nuvens) {
+      n.grupo.position.x += n.velocidade * dt;
+      if (n.grupo.position.x > n.limiteX) n.grupo.position.x = -n.limiteX;
+    }
+
+    // balanço da grama decorativa (visual, não afeta a contagem do jogo)
+    for (const dg of decorGrama) {
+      dg.rotation.z = Math.sin(t * 1.6 + dg.userData.faseVento) * 0.12;
+    }
+
+    // pássaros voando em círculo
+    for (const p of passaros) {
+      p.ang += p.vel * dt * 0.5;
+      p.grupo.position.set(
+        p.cx + Math.cos(p.ang) * p.raio,
+        p.altura + Math.sin(t * 0.6 + p.ang) * 1.2,
+        p.cz + Math.sin(p.ang) * p.raio
+      );
+      p.grupo.rotation.y = -p.ang + Math.PI / 2;
+      const bate = Math.sin(t * 14 + p.ang * 3) * 0.6;
+      p.asaEsq.rotation.x = bate;
+      p.asaDir.rotation.x = -bate;
+    }
+
+    // borboletas esvoaçando em trajetória errática perto do ponto de origem
+    for (const b of borboletas) {
+      b.grupo.position.x = b.cx + Math.sin(t * 0.7 + b.fase) * b.raio;
+      b.grupo.position.z = b.cz + Math.cos(t * 0.55 + b.fase * 1.3) * b.raio;
+      b.grupo.position.y = b.altBase + Math.sin(t * 2.2 + b.fase) * 0.4;
+      b.grupo.rotation.y = t * 0.8 + b.fase;
+      const bateAsa = Math.sin(t * 18 + b.fase) * 1.1;
+      b.asaEsq.rotation.y = bateAsa;
+      b.asaDir.rotation.y = -bateAsa;
+    }
+
+    // coelhos pulando aleatoriamente pela grama
+    for (const c of coelhos) {
+      c.esperando -= dt;
+      if (c.esperando <= 0 && c.grupo.position.distanceTo(c.alvo) < 0.3) {
+        const ang = Math.random() * Math.PI * 2;
+        c.alvo.set(c.base.x + Math.cos(ang) * (3 + Math.random()*5), 0, c.base.z + Math.sin(ang) * (3 + Math.random()*5));
+        c.esperando = 1.5 + Math.random() * 3;
+      }
+      if (c.grupo.position.distanceTo(c.alvo) > 0.3) {
+        const dir = c.alvo.clone().sub(c.grupo.position).normalize();
+        c.grupo.position.x += dir.x * 2.4 * dt;
+        c.grupo.position.z += dir.z * 2.4 * dt;
+        c.grupo.rotation.y = Math.atan2(dir.x, dir.z);
+        c.faseSalto += dt * 10;
+        c.grupo.position.y = Math.max(0, Math.abs(Math.sin(c.faseSalto))) * 0.5;
+      } else {
+        c.grupo.position.y = 0;
+      }
+    }
+
+    // partículas de poeira/pólen levadas pelo vento, com leve flutuação
+    for (const p of particulasAr) {
+      p.mesh.position.x += ventoDir.x * p.velVento * dt;
+      p.mesh.position.z += ventoDir.z * p.velVento * dt;
+      p.mesh.position.y = p.alturaBase + Math.sin(t * 0.8 + p.faseY) * 1.2;
+      if (p.mesh.position.x > 110) p.mesh.position.x = -110;
+      if (p.mesh.position.z > 110) p.mesh.position.z = -110;
+    }
+
+    // fumaça subindo das chaminés (partículas recicladas em loop)
+    for (const ch of chamines) {
+      for (const p of ch.particulas) {
+        p.vida += dt * 0.22;
+        if (p.vida > 1) p.vida -= 1;
+        p.mesh.position.y = p.vida * 3.2 * ch.escala;
+        p.mesh.position.x = Math.sin(t * 0.8 + p.faseX) * 0.35 * ch.escala * p.vida;
+        const escalaP = 0.4 + p.vida * 0.9;
+        p.mesh.scale.setScalar(escalaP);
+        p.mesh.material.opacity = 0.5 * (1 - p.vida);
+      }
+    }
+
+    renderer.render(scene, camera);
+  }
+  let _t0 = performance.now();
+  function tempoGlobal() { return (performance.now() - _t0) / 1000; }
+
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+</body>
+</html>
