@@ -494,11 +494,41 @@
     return parts.length >= 2;
   }
 
+  // Filtro de nomes impróprios / ofensivos (bloqueia palavrões e apelidos vulgares)
+  const BLOCKED_WORDS = [
+    "pinto","piroca","piru","rola","pau","pika","pica","penis",
+    "boceta","buceta","xoxota","xerereca","vagina","perereca",
+    "caralho","porra","merda","bosta","cacete","foda","fuder","fudido","fdp",
+    "puta","puto","viado","viadinho","bicha","corno","cornudo","otario",
+    "idiota","imbecil","retardado","burro","estupido","babaca",
+    "gostoso","gostosa","delicia","safado","safada","tesao",
+    "sexo","porno","xvideos","nude","pelado","pelada",
+    "hitler","nazista","nazi",
+    "arrombado","desgracado","guloso","gulosa"
+  ];
+  const BLOCKED_PHRASES = ["filho da puta","filha da puta","vai se fuder","vai tomar no"];
+
+  function containsBlockedWord(val){
+    const normalized = val
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove acentos
+
+    if(BLOCKED_PHRASES.some(p => normalized.includes(p))) return true;
+
+    // Verifica palavra por palavra (evita bloquear nomes reais como "Paulo", "Paula", etc.)
+    const tokens = normalized.split(/[^a-z]+/).filter(Boolean);
+    return tokens.some(tok => BLOCKED_WORDS.includes(tok));
+  }
+
   function saveName(){
     const val = document.getElementById("nameInput").value.trim();
     const errEl = document.getElementById("nameError");
     if(!isFullName(val)){
       if(errEl) errEl.textContent = "Digite seu nome e sobrenome (ex: João Silva).";
+      return;
+    }
+    if(containsBlockedWord(val)){
+      if(errEl) errEl.textContent = "Esse nome não é permitido. Use seu nome real, por favor.";
       return;
     }
     if(errEl) errEl.textContent = "";
@@ -514,6 +544,10 @@
     const trimmed = novo.trim();
     if(!isFullName(trimmed)){
       alert("Digite nome e sobrenome, ex: João Silva.");
+      return;
+    }
+    if(containsBlockedWord(trimmed)){
+      alert("Esse nome não é permitido. Use seu nome real, por favor.");
       return;
     }
     userName = trimmed;
