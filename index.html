@@ -282,6 +282,36 @@
   }
   #sendBtn:active{transform:scale(.92);}
   #sendBtn:disabled{opacity:.5; box-shadow:none;}
+  #attachBtn{
+    width:44px; height:44px; border-radius:50%; border:none; background:var(--panel-light);
+    color:var(--accent); font-size:18px; cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; transition:transform .12s ease;
+  }
+  #attachBtn:active{transform:scale(.9);}
+  #imagePreviewBar{
+    display:none; align-items:center; gap:10px; padding:10px 12px; background:var(--panel-light);
+    border-top:1px solid var(--border); flex-shrink:0;
+  }
+  #imagePreviewBar img{
+    width:52px; height:52px; object-fit:cover; border-radius:10px; border:1px solid var(--border);
+  }
+  #imagePreviewBar .info{flex:1; font-size:12.5px; color:var(--muted);}
+  #imagePreviewBar button{
+    background:rgba(255,95,109,.15); color:var(--danger); border:none; border-radius:10px;
+    padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .msg img.msgImage{
+    max-width:100%; border-radius:12px; margin-top:4px; display:block; cursor:pointer;
+  }
+  #imageViewerOverlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200; display:none;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  #imageViewerOverlay img{max-width:100%; max-height:100%; border-radius:12px;}
+  #imageViewerOverlay .closeViewer{
+    position:absolute; top:18px; right:18px; background:rgba(255,255,255,.15); border:none;
+    color:#fff; width:38px; height:38px; border-radius:50%; font-size:18px; cursor:pointer;
+  }
 
   #connStatus{
     position:fixed; top:8px; left:50%; transform:translateX(-50%);
@@ -365,9 +395,20 @@
     <div id="emptyState">Nenhuma mensagem ainda. Seja o primeiro a mandar algo! 🎓</div>
   </div>
 
+  <div id="imagePreviewBar">
+    <img id="imagePreviewThumb" src="" alt="">
+    <div class="info">Foto pronta para enviar</div>
+    <button onclick="cancelImageSelect()">Cancelar</button>
+  </div>
   <div id="inputBar">
+    <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="handleImageSelect(event)">
+    <button id="attachBtn" onclick="document.getElementById('imageInput').click()" title="Enviar foto">📷</button>
     <input id="msgInput" placeholder="Escreva sua mensagem..." maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()">
     <button id="sendBtn" onclick="sendMessage()">➤</button>
+  </div>
+  <div id="imageViewerOverlay" onclick="closeImageViewer()">
+    <button class="closeViewer" onclick="closeImageViewer(event)">✕</button>
+    <img id="imageViewerImg" src="" alt="">
   </div>
 </div>
 
@@ -781,6 +822,15 @@
     textEl.textContent = data.text || "";
     bubble.appendChild(textEl);
 
+    if(data.imageUrl){
+      const imgEl = document.createElement("img");
+      imgEl.className = "msgImage";
+      imgEl.src = data.imageUrl;
+      imgEl.loading = "lazy";
+      imgEl.onclick = (ev) => { ev.stopPropagation(); openImageViewer(data.imageUrl); };
+      bubble.appendChild(imgEl);
+    }
+
     const timeEl = document.createElement("div");
     timeEl.className = "time";
     if(data.timestamp && data.timestamp.toDate){
@@ -834,23 +884,102 @@
     }
   }
 
+  // ---------- ENVIO DE FOTO ----------
+  let selectedImageDataUrl = null;
+
+  function handleImageSelect(event){
+    const file = event.target.files && event.target.files[0];
+    event.target.value = ""; // permite selecionar a mesma foto de novo depois
+    if(!file) return;
+    if(!file.type.startsWith("image/")){
+      alert("Escolha um arquivo de imagem.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensiona/comprime para não estourar o limite do Firestore (1MB por mensagem)
+        const MAX_DIM = 1000;
+        let { width, height } = img;
+        if(width > MAX_DIM || height > MAX_DIM){
+          if(width > height){
+            height = Math.round(height * (MAX_DIM / width));
+            width = MAX_DIM;
+          }else{
+            width = Math.round(width * (MAX_DIM / height));
+            height = MAX_DIM;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let quality = 0.7;
+        let dataUrl = canvas.toDataURL("image/jpeg", quality);
+        // Reduz mais a qualidade se ainda estiver grande
+        while(dataUrl.length > 700000 && quality > 0.2){
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
+        }
+        if(dataUrl.length > 900000){
+          alert("Essa imagem é muito grande, mesmo depois de comprimida. Tente outra foto.");
+          return;
+        }
+
+        selectedImageDataUrl = dataUrl;
+        document.getElementById("imagePreviewThumb").src = dataUrl;
+        document.getElementById("imagePreviewBar").style.display = "flex";
+      };
+      img.onerror = () => alert("Não consegui abrir essa imagem.");
+      img.src = e.target.result;
+    };
+    reader.onerror = () => alert("Não consegui ler esse arquivo.");
+    reader.readAsDataURL(file);
+  }
+
+  function cancelImageSelect(){
+    selectedImageDataUrl = null;
+    document.getElementById("imagePreviewBar").style.display = "none";
+    document.getElementById("imagePreviewThumb").src = "";
+  }
+
+  function openImageViewer(url){
+    document.getElementById("imageViewerImg").src = url;
+    document.getElementById("imageViewerOverlay").style.display = "flex";
+  }
+
+  function closeImageViewer(event){
+    if(event) event.stopPropagation();
+    document.getElementById("imageViewerOverlay").style.display = "none";
+    document.getElementById("imageViewerImg").src = "";
+  }
+
   // ---------- SEND MESSAGE ----------
   function sendMessage(){
     const input = document.getElementById("msgInput");
     const text = input.value.trim();
-    if(!text) return;
+    const imageToSend = selectedImageDataUrl;
+    if(!text && !imageToSend) return;
 
     input.value = "";
+    cancelImageSelect();
 
     const collectionRef = currentDMPartner
       ? db.collection("conversas_privadas").doc(getDMConversationId(userName, currentDMPartner)).collection("chat")
       : db.collection("mensagens").doc(currentSubject).collection("chat");
 
-    collectionRef.add({
-        author: userName,
-        text: text,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      })
+    const payload = {
+      author: userName,
+      text: text,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if(imageToSend) payload.imageUrl = imageToSend;
+
+    collectionRef.add(payload)
       .catch(err => {
         console.error(err);
         alert("Erro ao enviar mensagem: " + err.message);
